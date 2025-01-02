@@ -1,0 +1,17 @@
+{
+  "name": "com.umbrason.package-hub",
+  "version": "1.0.0",
+  "displayName": "Umbrasons Package-Hub",
+  "description": "Browse unity packages on github made by Umbrason, or create a new one",
+  "keywords": [
+    "Github",
+    "Packages",
+    "Editor Tool"
+  ],
+  "author": {
+    "name": "Umbrason"
+  },
+  "hideInEditor": false,
+  "dependencies": {
+  }
+}
