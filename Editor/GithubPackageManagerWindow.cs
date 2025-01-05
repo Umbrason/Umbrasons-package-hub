@@ -8,6 +8,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using Octokit.Internal;
 
 public class GithubPackageManagerWindow : EditorWindow
 {
@@ -99,7 +100,19 @@ public class GithubPackageManagerWindow : EditorWindow
         var dateTime = System.DateTime.Now;
         lastUpdated = dateTime.ToString("m") + ", " + dateTime.ToString("t");
         githubClient = new GitHubClient(new ProductHeaderValue("Unity3D-Github-Package-Browser"));
-        repos[user] = (await githubClient.Repository.GetAllForUser("Umbrason")).Select((x) => new RepositoryData(x)).ToArray();
+        var candidates = (await githubClient.Repository.GetAllForUser("Umbrason")).Select((x) => new RepositoryData(x)).ToArray();
+        repos[user] = new RepositoryData[0];
+        foreach (var repo in candidates)
+        {
+            var repository = repo;
+            UnityEngine.Networking.UnityWebRequest.Get($"api.github.com/repos/{repository.owner}/{repository.name}/contents/package.json.meta").SendWebRequest().completed += (result) =>
+            {
+                var success = ((UnityEngine.Networking.UnityWebRequestAsyncOperation)result).webRequest.result == UnityEngine.Networking.UnityWebRequest.Result.Success;
+                if (!success) return;
+                repos[user] = repos[user].Append(repository).OrderBy(r => r.name).ToArray();
+                Repaint();
+            };
+        }
         reposExpanded[user] = true;
     }
 
@@ -167,6 +180,10 @@ public class GithubPackageManagerWindow : EditorWindow
         GUILayout.Space(4f);
         GUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
+        if (GUILayout.Button("clone"))
+        {
+            TryInstallPackage(repos[selected.Item1][selected.Item2], true);
+        }
         if (GUILayout.Button("install"))
         {
             TryInstallPackage(repos[selected.Item1][selected.Item2]);
@@ -265,11 +282,32 @@ public class GithubPackageManagerWindow : EditorWindow
         GUILayout.EndHorizontal();
     }
 
-    void TryInstallPackage(RepositoryData repository)
+    void TryInstallPackage(RepositoryData repository, bool cloneFirst = false)
     {
         //        if (UnityEditor.PackageManager.Client.List().Result.Where((x) => x.name.ToLower().Contains(repository.FullName.ToLower())).Count() != 0)
         //          return;
-        var request = UnityEditor.PackageManager.Client.Add($"{repository.PackageName}@{repository.cloneURL}");
+        var packageRef = $"{repository.PackageName}@{repository.cloneURL}";
+        if (cloneFirst)
+        {
+            var savePath = EditorUtility.SaveFolderPanel("Clone to where?", UnityEngine.Application.dataPath, "");
+            if (new DirectoryInfo(savePath).EnumerateFiles().Any())
+            {
+                var packageJSONfile = Path.Combine(savePath, "package.json");
+                if (!File.Exists(packageJSONfile))
+                    throw new Exception("Choose an Empty Folder");
+                var content = File.ReadAllText(packageJSONfile);
+                if (!content.Contains($"\"name\": \"{repository.PackageName}\""))
+                    throw new Exception("Choose an Empty Folder");
+            }
+            else
+            {
+                var process = System.Diagnostics.Process.Start($"git clone \"{repository.cloneURL}\" {savePath}");
+                process.WaitForExit();
+                if (process.ExitCode != 0) throw new Exception($"error while cloning {repository.cloneURL}. git exited with code {process.ExitCode}");
+            }
+            packageRef = $"file:{savePath}";
+        }
+        var request = UnityEditor.PackageManager.Client.Add(packageRef);
         while (InstallOperation(request).MoveNext())
             continue;
     }
@@ -299,7 +337,5 @@ public class GithubPackageManagerWindow : EditorWindow
         public DateTimeOffset creationDate;
         public string FullName { get { return owner + "\\" + name; } }
         public string PackageName { get { return $"com.{owner.ToLower()}.{name.ToLower()}"; } }
-
     }
-
 }
