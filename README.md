@@ -10,6 +10,3 @@ git URL: https://github.com/Umbrason/Umbrasons-package-hub.git
 
 # How do I add a package? 
 open the "Github package browser" window (Window>Github package browser) and click on a package. then click the 'install' button (bottom right corner)
-
-# How do I create a new type of asset?
-To define your own asset, you have to extend from the 'Package Content' class.
